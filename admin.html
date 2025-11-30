@@ -8,23 +8,21 @@
     body{font-family: Vazirmatn, sans-serif;background:#0f1724;color:#eef2ff;padding:18px}
     .card{background:#071027;padding:14px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.03)}
     label{display:block;color:#9ca3af;margin-bottom:6px}
-    input[type=text], input[type=password], input[type=number], textarea, select{
-      width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;margin-bottom:8px
-    }
+    input[type=text], input[type=password]{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;margin-bottom:8px}
     .row{display:flex;gap:8px;flex-wrap:wrap}
     button{padding:10px 12px;border-radius:8px;border:none;cursor:pointer}
     .btn-primary{background:#0ea5a4;color:#042022}
     .btn-plain{background:#111827;color:#fff}
+    .ok{background:#10b981;color:white}
+    .info{background:#3b82f6;color:white}
+    .danger{background:#ef4444;color:white}
     .muted{color:#9ca3af}
+    .notice{padding:8px;border-radius:8px;background:rgba(14,165,164,0.06);color:#bfeeea;margin-bottom:8px}
+    .error{padding:8px;border-radius:8px;background:rgba(239,68,68,0.06);color:#fecaca;margin-bottom:8px}
     .list{margin-top:10px}
     .item{display:flex;gap:8px;align-items:center;padding:8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
     .thumb img{width:88px;height:64px;object-fit:cover;border-radius:6px}
     .actions{margin-left:auto;display:flex;gap:8px}
-    .danger{background:#ef4444;color:white}
-    .ok{background:#10b981;color:white}
-    .info{background:#3b82f6;color:white}
-    .notice{padding:8px;border-radius:8px;background:rgba(14,165,164,0.06);color:#bfeeea;margin-bottom:8px}
-    .error{padding:8px;border-radius:8px;background:rgba(239,68,68,0.06);color:#fecaca;margin-bottom:8px}
     a.home{color:#a7f3d0;text-decoration:underline}
   </style>
 </head>
@@ -53,7 +51,7 @@
   <input id="path" value="data.json">
 
   <label>توکن GitHub (Personal Access Token)</label>
-  <input id="token" type="password" value="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">
+  <input id="token" type="password" placeholder="توکن را اینجا وارد کنید">
 
   <div class="row" style="margin-top:8px">
     <button id="btnConnect" class="btn-primary">اتصال و بارگذاری data.json</button>
@@ -97,49 +95,46 @@
 </div>
 
 <script>
-// state
-let state = { owner:'rsd-greentreeenglish', repo:'gallery', branch:'main', path:'data.json', token:'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', sha:null, data:{ images: [] } };
+let state = { owner:'rsd-greentreeenglish', repo:'gallery', branch:'main', path:'data.json', token:'', sha:null, data:{ images: [] } };
 
-// helper: show status
-function setStatus(html, isError=false){
-  const el = document.getElementById('status');
-  el.innerHTML = `<div class="${isError?'error':'notice'}">${html}</div>`;
-}
-
+function setStatus(html,isError=false){ document.getElementById('status').innerHTML=`<div class="${isError?'error':'notice'}">${html}</div>`; }
 function toBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
 function fromBase64(b64){ try{ return decodeURIComponent(escape(atob(b64))); }catch(e){ return atob(b64); } }
+function escapeHtml(s){ if(!s) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;'); }
+
+function readConfig(){ 
+  state.owner=document.getElementById('owner').value.trim();
+  state.repo=document.getElementById('repo').value.trim();
+  state.branch=document.getElementById('branch').value.trim()||'main';
+  state.path=document.getElementById('path').value.trim()||'data.json';
+  state.token=document.getElementById('token').value.trim();
+}
 
 async function loadRemote(){
+  readConfig();
+  if(!state.token){ setStatus('توکن را وارد کن.',true); return; }
   const url = `https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(state.path)}?ref=${state.branch}`;
   setStatus('در حال خواندن data.json از GitHub ...');
   try{
-    const headers = { 'Accept': 'application/vnd.github.v3+json', 'Authorization':'token ' + state.token };
-    const res = await fetch(url, { headers });
-    if(res.status === 404){
-      state.sha = null;
-      state.data = { images: [] };
-      renderList();
-      setStatus('فایل پیدا نشد؛ می‌توان آن را ایجاد کرد.');
-      return;
-    }
+    const headers = {'Accept':'application/vnd.github.v3+json','Authorization':'token '+state.token};
+    const res = await fetch(url,{headers});
+    if(res.status===404){ state.sha=null; state.data={ images:[] }; renderList(); setStatus('فایل پیدا نشد؛ می‌توان آن را ایجاد کرد.'); return; }
     if(!res.ok){ const txt=await res.text(); setStatus('خطا: '+res.status+' '+txt,true); return; }
     const json = await res.json();
-    state.sha = json.sha;
-    state.data = JSON.parse(fromBase64(json.content) || '{"images":[]}');
+    state.sha=json.sha;
+    state.data = JSON.parse(fromBase64(json.content)||'{"images":[]}');
     renderList();
-    setStatus('داده‌ها بارگذاری شد (sha: ' + state.sha + ')');
+    setStatus('داده‌ها بارگذاری شد (sha: '+state.sha+')');
   }catch(err){ setStatus('خطای شبکه: '+err.message,true); }
 }
 
 function renderList(){
-  const wrap = document.getElementById('list');
-  wrap.innerHTML='';
-  const arr = state.data.images||[];
+  const wrap=document.getElementById('list'); wrap.innerHTML='';
+  const arr=state.data.images||[];
   if(arr.length===0){ wrap.innerHTML='<div class="muted">هیچ تصویری وجود ندارد.</div>'; return; }
   arr.forEach((it,idx)=>{
-    const id = idx+1;
-    const node = document.createElement('div'); node.className='item';
-    node.innerHTML = `
+    const id=idx+1; const node=document.createElement('div'); node.className='item';
+    node.innerHTML=`
       <div class="thumb"><img src="${escapeHtml(it.url)}" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=120 height=90><rect width=100% height=100% fill=%23071020/></svg>'"></div>
       <div><div style="font-weight:700">#${id}</div><div class="muted" style="max-width:360px">${escapeHtml(it.desc||'')}</div></div>
       <div class="actions">
@@ -150,34 +145,33 @@ function renderList(){
   });
 }
 
-function escapeHtml(s){ if(!s) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;'); }
-
-document.getElementById('btnAdd').addEventListener('click', ()=>{
-  const url = document.getElementById('newUrl').value.trim();
-  const desc = document.getElementById('newDesc').value.trim();
-  if(!url){ setStatus('لینک تصویر را وارد کن.', true); return; }
-  state.data.images.push({ url, desc });
-  renderList();
+document.getElementById('btnAdd').addEventListener('click',()=>{
+  const url=document.getElementById('newUrl').value.trim();
+  const desc=document.getElementById('newDesc').value.trim();
+  if(!url){ setStatus('لینک تصویر را وارد کن.',true); return; }
+  state.data.images.push({url,desc}); renderList();
   setStatus('تصویر اضافه شد؛ برای ذخیره در GitHub روی "ذخیره در GitHub" کلیک کن.');
   document.getElementById('newUrl').value=''; document.getElementById('newDesc').value='';
 });
 
-document.getElementById('btnPush').addEventListener('click', async ()=>{
-  const payload = JSON.stringify(state.data,null,2);
-  const b64 = toBase64(payload);
-  const url = `https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(state.path)}`;
-  const body = { message:'Update gallery (via admin panel)', content:b64, branch:state.branch };
-  if(state.sha) body.sha = state.sha;
+document.getElementById('btnPush').addEventListener('click',async()=>{
+  readConfig();
+  if(!state.token){ setStatus('توکن را وارد کن.',true); return; }
+  const payload=JSON.stringify(state.data,null,2);
+  const b64=toBase64(payload);
+  const url=`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(state.path)}`;
+  const body={ message:'Update gallery (via admin panel)', content:b64, branch:state.branch };
+  if(state.sha) body.sha=state.sha;
   setStatus('در حال ارسال به GitHub ...');
   try{
-    const res = await fetch(url,{
+    const res=await fetch(url,{
       method:'PUT',
       headers:{'Accept':'application/vnd.github.v3+json','Authorization':'token '+state.token,'Content-Type':'application/json'},
       body:JSON.stringify(body)
     });
-    const j = await res.json();
+    const j=await res.json();
     if(!res.ok){ setStatus('خطا در آپلود: '+(j.message||res.status),true); return; }
-    state.sha = j.content && j.content.sha;
+    state.sha=j.content && j.content.sha;
     setStatus('ذخیره با موفقیت انجام شد. sha جدید: '+state.sha);
     document.getElementById('pushMsg').innerText='آخرین commit: '+(j.commit && j.commit.sha||'');
   }catch(err){ setStatus('خطای شبکه: '+err.message,true); }
@@ -188,11 +182,9 @@ function openEditor(idx){ const it=state.data.images[idx]; if(!it) return; docum
 function applyEdit(idx){ const url=document.getElementById('editUrl').value.trim(); const desc=document.getElementById('editDesc').value.trim(); if(!url){ setStatus('لینک را وارد کن.',true); return; } state.data.images[idx]={url,desc}; renderList(); closeEditor(); setStatus('ویرایش ذخیره شد؛ برای ثبت در GitHub push کن.'); }
 function closeEditor(){ document.getElementById('editor').style.display='none'; }
 
-document.getElementById('btnConnect').addEventListener('click', async ()=>{ await loadRemote(); });
-document.getElementById('btnGetRaw').addEventListener('click', ()=>{ window.open(`https://raw.githubusercontent.com/${state.owner}/${state.repo}/${state.branch}/${state.path}`,'_blank'); });
+document.getElementById('btnConnect').addEventListener('click',async()=>{ await loadRemote(); });
+document.getElementById('btnGetRaw').addEventListener('click',()=>{ window.open(`https://raw.githubusercontent.com/${state.owner}/${state.repo}/${state.branch}/${state.path}`,'_blank'); });
 
-// auto load on page load
-loadRemote();
 </script>
 </body>
 </html>
