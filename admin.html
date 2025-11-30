@@ -41,19 +41,19 @@
 <section class="card">
   <h3>پیکربندی مخزن</h3>
   <label>مالک (Owner)</label>
-  <input id="owner" placeholder="مثال: rasandesign">
+  <input id="owner" value="rsd-greentreeenglish">
 
   <label>مخزن (Repo)</label>
-  <input id="repo" placeholder="مثال: mygallery">
+  <input id="repo" value="gallery">
 
   <label>شاخه (Branch)</label>
-  <input id="branch" placeholder="main" value="main">
+  <input id="branch" value="main">
 
   <label>مسیر فایل داده (Path)</label>
-  <input id="path" placeholder="data.json" value="data.json">
+  <input id="path" value="data.json">
 
   <label>توکن GitHub (Personal Access Token)</label>
-  <input id="token" type="password" placeholder="توکن را اینجا وارد کنید — این صفحه توکن را ذخیره نمی‌کند">
+  <input id="token" type="password" value="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">
 
   <div class="row" style="margin-top:8px">
     <button id="btnConnect" class="btn-primary">اتصال و بارگذاری data.json</button>
@@ -81,7 +81,7 @@
   <div id="list" class="list"></div>
 </section>
 
-<!-- edit modal (simple) -->
+<!-- edit modal -->
 <div id="editor" style="display:none;position:fixed;left:0;right:0;top:0;bottom:0;align-items:center;justify-content:center;background:rgba(2,6,23,0.6)">
   <div style="width:720px;max-width:96%;margin:auto;background:#071027;padding:16px;border-radius:10px">
     <h3>ویرایش تصویر</h3>
@@ -97,13 +97,8 @@
 </div>
 
 <script>
-/*
-  منطق کامل مدیریت با GitHub API (PUT contents)
-  نکتهٔ مهم: این اسکریپت توکن را فقط در حافظه نگه می‌دارد و آن را در localStorage ذخیره نمی‌کند.
-*/
-
 // state
-let state = { owner:'', repo:'', branch:'main', path:'data.json', token:'', sha:null, data:{ images: [] } };
+let state = { owner:'rsd-greentreeenglish', repo:'gallery', branch:'main', path:'data.json', token:'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', sha:null, data:{ images: [] } };
 
 // helper: show status
 function setStatus(html, isError=false){
@@ -111,187 +106,93 @@ function setStatus(html, isError=false){
   el.innerHTML = `<div class="${isError?'error':'notice'}">${html}</div>`;
 }
 
-// base64 helper
 function toBase64(str){ return btoa(unescape(encodeURIComponent(str))); }
 function fromBase64(b64){ try{ return decodeURIComponent(escape(atob(b64))); }catch(e){ return atob(b64); } }
 
-// read inputs
-function readConfig(){
-  state.owner = document.getElementById('owner').value.trim();
-  state.repo  = document.getElementById('repo').value.trim();
-  state.branch = document.getElementById('branch').value.trim() || 'main';
-  state.path = document.getElementById('path').value.trim() || 'data.json';
-  state.token = document.getElementById('token').value.trim();
-}
-
-// fetch current file via GitHub API (to get sha)
 async function loadRemote(){
-  readConfig();
-  if(!state.owner || !state.repo){ setStatus('owner و repo را وارد کن.', true); return; }
   const url = `https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(state.path)}?ref=${state.branch}`;
   setStatus('در حال خواندن data.json از GitHub ...');
   try{
-    const headers = { 'Accept': 'application/vnd.github.v3+json' };
-    if(state.token) headers['Authorization'] = 'token ' + state.token;
+    const headers = { 'Accept': 'application/vnd.github.v3+json', 'Authorization':'token ' + state.token };
     const res = await fetch(url, { headers });
     if(res.status === 404){
-      // file not found — we'll consider empty
       state.sha = null;
       state.data = { images: [] };
       renderList();
-      setStatus('فایل پیدا نشد؛ می‌توان آن را ایجاد کرد (وقتی push بزنی).');
+      setStatus('فایل پیدا نشد؛ می‌توان آن را ایجاد کرد.');
       return;
     }
-    if(!res.ok){ const txt = await res.text(); setStatus('خطا در واکشی: ' + res.status + ' ' + txt, true); return; }
+    if(!res.ok){ const txt=await res.text(); setStatus('خطا: '+res.status+' '+txt,true); return; }
     const json = await res.json();
-    if(!json.content){ setStatus('پاسخ از GitHub نامتعارف است.', true); return; }
     state.sha = json.sha;
-    const content = fromBase64(json.content);
-    try{
-      state.data = JSON.parse(content);
-      if(!Array.isArray(state.data.images)) state.data.images = [];
-    }catch(e){
-      state.data = { images: [] };
-      setStatus('data.json یافت شد اما JSON معتبر نیست — محتوا ریست شد.', true);
-    }
+    state.data = JSON.parse(fromBase64(json.content) || '{"images":[]}');
     renderList();
-    setStatus('داده‌ها بارگذاری شد. (sha: ' + (state.sha||'—') + ')');
-  }catch(err){
-    setStatus('خطای شبکه: ' + err.message, true);
-  }
+    setStatus('داده‌ها بارگذاری شد (sha: ' + state.sha + ')');
+  }catch(err){ setStatus('خطای شبکه: '+err.message,true); }
 }
 
-// render list
 function renderList(){
   const wrap = document.getElementById('list');
-  wrap.innerHTML = '';
-  const arr = state.data && Array.isArray(state.data.images) ? state.data.images : [];
-  if(arr.length===0){ wrap.innerHTML = '<div class="muted">هیچ تصویری وجود ندارد.</div>'; return; }
-  arr.forEach((it, idx) => {
+  wrap.innerHTML='';
+  const arr = state.data.images||[];
+  if(arr.length===0){ wrap.innerHTML='<div class="muted">هیچ تصویری وجود ندارد.</div>'; return; }
+  arr.forEach((it,idx)=>{
     const id = idx+1;
     const node = document.createElement('div'); node.className='item';
     node.innerHTML = `
       <div class="thumb"><img src="${escapeHtml(it.url)}" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=120 height=90><rect width=100% height=100% fill=%23071020/></svg>'"></div>
-      <div>
-        <div style="font-weight:700">#${id}</div>
-        <div class="muted" style="max-width:360px">${escapeHtml(it.desc||'')}</div>
-      </div>
+      <div><div style="font-weight:700">#${id}</div><div class="muted" style="max-width:360px">${escapeHtml(it.desc||'')}</div></div>
       <div class="actions">
         <button class="btn-plain" onclick="openEditor(${idx})">ویرایش</button>
         <button class="danger" onclick="removeAt(${idx})">حذف</button>
-      </div>
-    `;
+      </div>`;
     wrap.appendChild(node);
   });
 }
 
-// escape
 function escapeHtml(s){ if(!s) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;'); }
 
-// add locally
 document.getElementById('btnAdd').addEventListener('click', ()=>{
   const url = document.getElementById('newUrl').value.trim();
   const desc = document.getElementById('newDesc').value.trim();
-  if(!url) { setStatus('لینک تصویر را وارد کن.', true); return; }
+  if(!url){ setStatus('لینک تصویر را وارد کن.', true); return; }
   state.data.images.push({ url, desc });
   renderList();
-  setStatus('تصویر به‌صورت محلی اضافه شد؛ برای ذخیره در GitHub روی "ذخیره در GitHub (commit)" کلیک کن.');
+  setStatus('تصویر اضافه شد؛ برای ذخیره در GitHub روی "ذخیره در GitHub" کلیک کن.');
   document.getElementById('newUrl').value=''; document.getElementById('newDesc').value='';
 });
 
-// push to GitHub (create or update)
 document.getElementById('btnPush').addEventListener('click', async ()=>{
-  readConfig();
-  if(!state.token){ setStatus('توکن را وارد کن تا بتوانیم به GitHub بنویسیم.', true); return; }
-  if(!state.owner || !state.repo){ setStatus('owner و repo را وارد کن.', true); return; }
-  // prepare content
-  const payload = JSON.stringify(state.data, null, 2);
+  const payload = JSON.stringify(state.data,null,2);
   const b64 = toBase64(payload);
   const url = `https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(state.path)}`;
-  const body = {
-    message: 'Update gallery (via admin panel)',
-    content: b64,
-    branch: state.branch
-  };
-  if(state.sha) body.sha = state.sha; // update
+  const body = { message:'Update gallery (via admin panel)', content:b64, branch:state.branch };
+  if(state.sha) body.sha = state.sha;
   setStatus('در حال ارسال به GitHub ...');
   try{
-    const res = await fetch(url, {
+    const res = await fetch(url,{
       method:'PUT',
-      headers: {
-        'Accept':'application/vnd.github.v3+json',
-        'Authorization':'token ' + state.token,
-        'Content-Type':'application/json'
-      },
-      body: JSON.stringify(body)
+      headers:{'Accept':'application/vnd.github.v3+json','Authorization':'token '+state.token,'Content-Type':'application/json'},
+      body:JSON.stringify(body)
     });
     const j = await res.json();
-    if(!res.ok){ setStatus('خطا در آپلود: ' + (j && j.message ? j.message : res.status), true); return; }
-    // success: update sha
+    if(!res.ok){ setStatus('خطا در آپلود: '+(j.message||res.status),true); return; }
     state.sha = j.content && j.content.sha;
-    setStatus('ذخیره با موفقیت انجام شد. sha جدید: ' + state.sha);
-    document.getElementById('pushMsg').innerText = 'آخرین commit: ' + (j.commit && j.commit.sha ? j.commit.sha : '');
-  }catch(err){
-    setStatus('خطای شبکه: ' + err.message, true);
-  }
+    setStatus('ذخیره با موفقیت انجام شد. sha جدید: '+state.sha);
+    document.getElementById('pushMsg').innerText='آخرین commit: '+(j.commit && j.commit.sha||'');
+  }catch(err){ setStatus('خطای شبکه: '+err.message,true); }
 });
 
-// remove item locally
-function removeAt(idx){
-  if(!confirm('آیا مطمئنی حذف شود؟')) return;
-  state.data.images.splice(idx,1);
-  renderList();
-  setStatus('مورد حذف شد؛ برای ثبت در GitHub push کن.');
-}
+function removeAt(idx){ if(!confirm('آیا مطمئنی حذف شود؟')) return; state.data.images.splice(idx,1); renderList(); setStatus('مورد حذف شد؛ برای ثبت در GitHub push کن.'); }
+function openEditor(idx){ const it=state.data.images[idx]; if(!it) return; document.getElementById('editUrl').value=it.url||''; document.getElementById('editDesc').value=it.desc||''; document.getElementById('editor').style.display='flex'; document.getElementById('applyEditBtn').onclick=function(){ applyEdit(idx); }; }
+function applyEdit(idx){ const url=document.getElementById('editUrl').value.trim(); const desc=document.getElementById('editDesc').value.trim(); if(!url){ setStatus('لینک را وارد کن.',true); return; } state.data.images[idx]={url,desc}; renderList(); closeEditor(); setStatus('ویرایش ذخیره شد؛ برای ثبت در GitHub push کن.'); }
+function closeEditor(){ document.getElementById('editor').style.display='none'; }
 
-// open editor
-function openEditor(idx){
-  const it = state.data.images[idx];
-  if(!it) return;
-  document.getElementById('editUrl').value = it.url || '';
-  document.getElementById('editDesc').value = it.desc || '';
-  document.getElementById('editor').style.display = 'flex';
-  // store current idx on button
-  const btn = document.getElementById('applyEditBtn');
-  btn.onclick = function(){ applyEdit(idx); };
-}
+document.getElementById('btnConnect').addEventListener('click', async ()=>{ await loadRemote(); });
+document.getElementById('btnGetRaw').addEventListener('click', ()=>{ window.open(`https://raw.githubusercontent.com/${state.owner}/${state.repo}/${state.branch}/${state.path}`,'_blank'); });
 
-// apply edit
-function applyEdit(idx){
-  const url = document.getElementById('editUrl').value.trim();
-  const desc = document.getElementById('editDesc').value.trim();
-  if(!url){ setStatus('لینک را وارد کن.', true); return; }
-  state.data.images[idx] = { url, desc };
-  renderList();
-  closeEditor();
-  setStatus('ویرایش محلی ذخیره شد؛ برای ثبت در GitHub push کن.');
-}
-
-function closeEditor(){ document.getElementById('editor').style.display = 'none'; }
-
-// connect button
-document.getElementById('btnConnect').addEventListener('click', async ()=>{
-  await loadRemote();
-});
-
-// open raw (for convenience)
-document.getElementById('btnGetRaw').addEventListener('click', ()=>{
-  readConfig();
-  if(!state.owner || !state.repo) { setStatus('owner و repo را وارد کن.', true); return; }
-  const raw = `https://raw.githubusercontent.com/${state.owner}/${state.repo}/${state.branch}/${state.path}`;
-  window.open(raw, '_blank');
-});
-
-// on load: try to prefill owner/repo from URL query (optional)
-(function prefillFromQuery(){
-  const q = new URLSearchParams(location.search);
-  const owner = q.get('owner'); const repo=q.get('repo'); const branch=q.get('branch'); const path=q.get('path');
-  if(owner) document.getElementById('owner').value = owner;
-  if(repo) document.getElementById('repo').value = repo;
-  if(branch) document.getElementById('branch').value = branch;
-  if(path) document.getElementById('path').value = path;
-})();
+// auto load on page load
+loadRemote();
 </script>
-
 </body>
 </html>
