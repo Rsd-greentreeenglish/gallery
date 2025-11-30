@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>گالری تصاویر</title>
+  <style>
+    body{font-family: Vazirmatn, sans-serif; background:#f6f8fb; margin:0; padding:24px; color:#0b1220}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    h1{margin:0}
+    .muted{color:#6b7280}
+    .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:20px}
+    .card{background:white;border-radius:10px;padding:10px;box-shadow:0 6px 18px rgba(11,17,32,0.06);text-align:center}
+    .thumb{height:160px;overflow:hidden;border-radius:8px;background:#e6eef6;display:flex;align-items:center;justify-content:center}
+    .thumb img{width:100%;height:100%;object-fit:cover}
+    .num{font-weight:700;margin:8px 0}
+    .desc{color:#374151;font-size:14px;min-height:38px}
+    .notice{margin-top:20px;color:#6b7280}
+    a.manage{background:#0ea5a4;color:white;padding:8px 12px;border-radius:8px;text-decoration:none}
+  </style>
+</head>
+<body>
+<header>
+  <h1>گالری تصاویر</h1>
+  <div>
+    <a class="manage" href="admin.html" target="_blank">پنل مدیریت</a>
+  </div>
+</header>
+
+<main>
+  <div id="gallery" class="gallery"></div>
+  <div id="empty" class="notice" style="display:none">گالری خالی است — بعد از افزودن تصویر در پنل مدیریت، اینجا نمایش داده می‌شود.</div>
+  <div id="error" class="notice" style="display:none;color:#b91c1c"></div>
+</main>
+
+<script>
+/*
+  تنظیمات: اینجا مقدار owner/repo/branch را وارد کن
+  یا اگر ترجیح می‌دهی admin صفحه آدرس را تنظیم کند، آن را خالی بگذار.
+*/
+const GITHUB_OWNER = ""; // مثال: "rasandesign"
+const GITHUB_REPO  = ""; // مثال: "mygallery"
+const BRANCH = "main";   // یا "gh-pages"
+const DATA_PATH = "data.json"; // مسیر فایل در repo
+
+function showError(msg){ const e=document.getElementById('error'); e.style.display='block'; e.textContent=msg; }
+function clearError(){ document.getElementById('error').style.display='none'; }
+
+function rawUrl(owner, repo, branch, path){
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+}
+
+async function fetchDataFromGit(){ 
+  if(!GITHUB_OWNER || !GITHUB_REPO){ showError('تنظیمات GitHub در index.html تکمیل نشده — یا از admin.html استفاده کن.'); return null; }
+  const url = rawUrl(GITHUB_OWNER, GITHUB_REPO, BRANCH, DATA_PATH);
+  try{
+    const res = await fetch(url);
+    if(!res.ok) { showError('خطا در خواندن data.json از مخزن (احتمالاً مسیر/شاخه اشتباه است).'); return null; }
+    const data = await res.json();
+    return data;
+  }catch(err){
+    showError('خطا در واکشی داده‌ها: ' + err.message);
+    return null;
+  }
+}
+
+function renderGallery(images){
+  const root = document.getElementById('gallery');
+  root.innerHTML = '';
+  if(!images || images.length===0){ document.getElementById('empty').style.display='block'; return; }
+  document.getElementById('empty').style.display='none';
+  images.forEach((it, idx) => {
+    const id = idx+1;
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `
+      <div class="thumb"><img src="${escapeHtml(it.url)}" alt="image-${id}" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=400 height=200><rect width=100% height=100% fill=%23e6eef6/></svg>'"></div>
+      <div class="num">#${id}</div>
+      <div class="desc">${escapeHtml(it.desc||'')}</div>
+    `;
+    root.appendChild(card);
+  });
+}
+
+function escapeHtml(s){ if(!s) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;'); }
+
+(async function init(){
+  clearError();
+  const data = await fetchDataFromGit();
+  if(data && Array.isArray(data.images)){ renderGallery(data.images); }
+  else if(data && data.images === undefined){ showError('فایل data.json یافت شد اما ساختار صحیح نیست. باید {"images": []} باشد.'); }
+})();
+</script>
+
+</body>
+</html>
